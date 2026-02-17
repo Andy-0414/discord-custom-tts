@@ -1,214 +1,132 @@
 # Discord Custom TTS Bot
 
-Qwen3-TTS를 사용한 Discord 음성 클론 봇입니다. 3초 길이의 오디오 샘플로 목소리를 클론하여, Discord 채팅 메시지를 해당 목소리로 읽어줍니다.
+Qwen3-TTS 기반 Discord 음성 클론 봇
 
 ## 특징
 
-- 🎙️ **Voice Cloning**: Qwen3-TTS 기반 음성 클론 (3초 샘플로 가능)
-- 🤖 **Discord Integration**: Discord.py를 활용한 음성 채널 연동
-- 🚀 **GPU Acceleration**: CUDA 지원으로 빠른 음성 생성
-- 🇰🇷 **한국어 지원**: 한국어 TTS 완벽 지원
-- 🔧 **확장 가능**: 여러 목소리 프로필 관리
+- 🎙️ Qwen3-TTS Voice Clone (0.6B 모델)
+- ⚡ FlashAttention2 최적화 (2-3배 빠름)
+- 🔥 torch.compile() JIT 컴파일
+- 🎵 병렬 스트리밍 재생
+- 🇰🇷 한국어 TTS 지원
 
 ## 요구사항
 
-### 하드웨어
-- NVIDIA GPU (CUDA 지원)
-- 최소 8GB VRAM 권장
-
-### 소프트웨어
 - Python 3.10+
-- CUDA Toolkit 11.8+
-- FFmpeg (Discord 음성 재생용)
+- Windows 10/11
+- NVIDIA GPU (CUDA 12.4+)
+- Discord Bot Token
 
 ## 설치
 
-### 1. 저장소 클론
-
 ```bash
-git clone https://github.com/Andy-0414/discord-custom-tts.git
-cd discord-custom-tts
-```
-
-### 2. 가상환경 생성
-
-```bash
+# 1. 가상환경 생성
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 2. 의존성 설치
+venv\Scripts\pip.exe install -r requirements.txt
+
+# 3. FlashAttention2 설치 (Windows)
+# kingbri1/flash-attention releases에서 적절한 wheel 다운로드
+venv\Scripts\pip.exe install flash_attn-2.8.2+cu124torch2.6.0cxx11abiFALSE-cp310-cp310-win_amd64.whl
+
+# 4. .env 파일 생성
+copy .env.example .env
+# DISCORD_TOKEN, GUILD_ID 등 설정
 ```
-
-### 3. 의존성 설치
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. 환경 설정
-
-`.env.example`을 복사해서 `.env` 파일을 만듭니다:
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일을 수정해서 Discord 봇 토큰과 설정을 입력합니다:
-
-```env
-DISCORD_TOKEN=your_discord_bot_token_here
-GUILD_ID=your_guild_id_here
-DEFAULT_VOICE=jonghun
-DEVICE=cuda:0
-ADMIN_IDS=123456789012345678
-```
-
-### 5. 목소리 프로필 설정
-
-`voices/jonghun/` 디렉토리에 참조 오디오를 준비합니다:
-
-1. **reference.wav**: 3초 이상의 깨끗한 음성 샘플 (WAV 형식)
-2. **reference.txt**: 참조 오디오의 정확한 텍스트 (한국어)
-
-예시:
-```
-voices/
-└── jonghun/
-    ├── reference.wav
-    └── reference.txt (내용: "안녕하세요, 저는 종훈입니다.")
-```
-
-### 6. Discord 봇 설정
-
-1. [Discord Developer Portal](https://discord.com/developers/applications)에서 봇 생성
-2. **Bot** 탭에서 토큰 복사 → `.env`의 `DISCORD_TOKEN`에 입력
-3. **Privileged Gateway Intents** 활성화:
-   - ✅ MESSAGE CONTENT INTENT
-   - ✅ SERVER MEMBERS INTENT
-4. **OAuth2 → URL Generator**:
-   - Scopes: `bot`
-   - Bot Permissions: `Send Messages`, `Connect`, `Speak`, `Use Voice Activity`
-   - 생성된 URL로 봇을 서버에 초대
 
 ## 실행
 
-### 로컬 실행
+### Windows (권장)
 
 ```bash
-python bot.py
+# 시작
+start.bat
+
+# 또는 PowerShell
+.\start.ps1
+
+# 종료
+stop.bat
 ```
 
-### Docker 실행
+### 수동 실행
 
 ```bash
-docker-compose up -d
+venv\Scripts\python.exe bot.py
 ```
 
-봇이 시작되면 Discord에서 "온라인" 상태가 됩니다.
+## 환경 변수 (.env)
 
-## 사용법
-
-### 기본 명령어
-
-- **!tts <텍스트>**: 텍스트를 음성으로 변환하여 재생
-  ```
-  !tts 안녕하세요! 오늘 날씨가 좋네요.
-  ```
-
-- **!join**: 봇을 현재 음성 채널로 초대
-  ```
-  !join
-  ```
-
-- **!leave**: 봇을 음성 채널에서 내보내기
-  ```
-  !leave
-  ```
-
-- **!voices**: 사용 가능한 목소리 프로필 목록
-  ```
-  !voices
-  ```
-
-- **!help**: 도움말 표시
-  ```
-  !help
-  ```
-
-### 관리자 명령어
-
-- **!clone <이름>**: 새로운 목소리 프로필 생성 (오디오 파일 첨부 필요)
-  ```
-  !clone myvoice
-  (오디오 파일 첨부)
-  ```
-
-## 프로젝트 구조
-
-```
-discord-custom-tts/
-├── bot.py                 # Discord 봇 메인 로직
-├── tts_engine.py          # Qwen3-TTS 래퍼
-├── voice_manager.py       # Discord 음성 채널 관리
-├── config.py              # 설정 관리
-├── requirements.txt       # Python 의존성
-├── .env.example           # 환경변수 템플릿
-├── .gitignore             # Git 무시 파일
-├── Dockerfile             # Docker 이미지 정의
-├── docker-compose.yml     # Docker Compose 설정
-├── README.md              # 프로젝트 설명서
-├── voices/                # 목소리 프로필 디렉토리
-│   └── jonghun/
-│       ├── reference.wav
-│       └── reference.txt
-└── temp/                  # 임시 오디오 파일 (자동 생성)
+```env
+DISCORD_TOKEN=your_discord_bot_token
+GUILD_ID=your_guild_id
+DEFAULT_VOICE=jang
+DEVICE=cuda:0
+ADMIN_IDS=your_user_id
+MODEL_SIZE=0.6B
+USE_FLASH_ATTN=true
 ```
 
-## 기술 스택
+## 명령어
 
-- **TTS Engine**: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (Voice Clone 1.7B Base)
-- **Discord Library**: discord.py 2.3+
-- **ML Framework**: PyTorch 2.0+
-- **Audio Processing**: soundfile, PyNaCl
+- `!tts <텍스트>` - TTS 생성
+- `!stream <텍스트>` - 스트리밍 TTS (병렬 처리)
+- `!join` - 음성 채널 참가
+- `!leave` - 음성 채널 나가기
+- `!voices` - 사용 가능한 목소리 목록
+- `!clone <이름>` - 새 목소리 추가 (관리자)
+- `!commands` - 도움말
+
+## 음성 프로필 추가
+
+1. 3초 이상의 깨끗한 음성 녹음 (WAV)
+2. `voices/<이름>/reference.wav`로 저장
+3. `voices/<이름>/reference.txt`에 녹음 텍스트 입력
+4. Discord에서 `!clone <이름>` 명령어로 등록
+
+## 성능 최적화
+
+**현재 구성:**
+- 0.6B 모델: 1.7B 대비 2-3배 빠름
+- FlashAttention2: 추가 2-3배 향상
+- torch.compile(): 20-30% 향상
+- **전체: 기본 대비 5-7배 빠름**
+
+**모델 변경:**
+```env
+MODEL_SIZE=0.6B  # 빠름, 품질 약간 낮음
+MODEL_SIZE=1.7B  # 느림, 품질 높음
+```
+
+**FlashAttention2 비활성화:**
+```env
+USE_FLASH_ATTN=false  # dtype 에러 시
+```
 
 ## 트러블슈팅
 
-### CUDA 메모리 부족
-
-모델 로드 시 메모리 부족 오류가 발생하면:
-
-1. `config.py`에서 `dtype`을 `torch.float16`으로 변경
-2. 다른 GPU 프로그램 종료
-3. GPU 메모리가 8GB 미만이면 CPU 모드 사용 (`DEVICE=cpu`)
-
-### 음성 재생 안 됨
-
-FFmpeg가 설치되어 있는지 확인:
-
-```bash
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# https://ffmpeg.org/download.html
+### FlashAttention2 dtype 에러
+```env
+USE_FLASH_ATTN=false
 ```
 
-### 봇이 음성 채널에 연결 안 됨
+### GPU 메모리 부족
+```env
+MODEL_SIZE=0.6B  # 더 작은 모델 사용
+```
 
-Discord 봇 권한 확인:
-- ✅ Connect (음성 채널 연결)
-- ✅ Speak (음성 재생)
-- ✅ Use Voice Activity (음성 활동 사용)
+### 봇이 응답하지 않음
+- Discord Privileged Intents 활성화 확인
+- MESSAGE CONTENT INTENT 필수
 
 ## 라이선스
 
-MIT License
+MIT
 
-## 기여
+## 기술 스택
 
-이슈 및 Pull Request 환영합니다!
-
-## 작성자
-
-Andy-0414 (pjh8667@gmail.com)
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen-Audio) - 음성 합성
+- [discord.py](https://github.com/Rapptz/discord.py) - Discord API
+- [Flash-Attention](https://github.com/Dao-AILab/flash-attention) - 최적화
+- [PyTorch](https://pytorch.org/) - 딥러닝 프레임워크

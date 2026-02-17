@@ -1,4 +1,4 @@
-﻿import torch
+import torch
 import soundfile as sf
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
@@ -11,16 +11,17 @@ logger = logging.getLogger(__name__)
 
 
 class TTSEngine:
-    """Qwen3-TTS Voice Clone Engine with caching"""
+    """Qwen3-TTS Voice Clone Engine with optimizations"""
     
     def __init__(self):
         self.model: Optional[Qwen3TTSModel] = None
         self.device = config.DEVICE
         self.model_name = config.MODEL_NAME
         self.voice_prompts: Dict[str, Any] = {}  # Cache for voice prompts
+        self._compiled = False
         
     def load_model(self):
-        """Load Qwen3-TTS model (called once at startup)"""
+        """Load Qwen3-TTS model with optimizations"""
         if self.model is not None:
             logger.info("Model already loaded")
             return
@@ -28,12 +29,38 @@ class TTSEngine:
         logger.info(f"Loading Qwen3-TTS model: {self.model_name} on {self.device}")
         
         try:
+            # Try FlashAttention2 first, fallback to eager
+            try:
+                attn_impl = "flash_attention_2"
+                logger.info("Attempting FlashAttention2...")
+            except:
+                attn_impl = "eager"
+                logger.info("FlashAttention2 not available, using eager mode")
+            
             self.model = Qwen3TTSModel.from_pretrained(
                 self.model_name,
                 device_map=self.device,
                 dtype=torch.bfloat16,
-                attn_implementation="eager",
+                attn_implementation=attn_impl,
             )
+            
+            # Enable PyTorch optimizations
+            if hasattr(torch, 'compile'):
+                logger.info("Compiling model with torch.compile()...")
+                try:
+                    self.model = torch.compile(self.model, mode="reduce-overhead")
+                    self._compiled = True
+                    logger.info("Model compiled successfully!")
+                except Exception as e:
+                    logger.warning(f"torch.compile() failed: {e}")
+            
+            # Enable CUDA optimizations
+            if torch.cuda.is_available():
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+                logger.info("CUDA optimizations enabled")
+            
             logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
@@ -100,12 +127,14 @@ class TTSEngine:
             # Get or create cached voice prompt (2x faster!)
             voice_prompt = self._get_or_create_prompt(voice_name)
             
-            # Generate voice clone with cached prompt
-            wavs, sr = self.model.generate_voice_clone(
-                text=text,
-                language="Korean",
-                voice_clone_prompt=voice_prompt,
-            )
+            # Use autocast for mixed precision
+            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                # Generate voice clone with cached prompt
+                wavs, sr = self.model.generate_voice_clone(
+                    text=text,
+                    language="Korean",
+                    voice_clone_prompt=voice_prompt,
+                )
             
             # Save audio
             sf.write(str(output_path), wavs[0], sr)
@@ -119,7 +148,7 @@ class TTSEngine:
     
 
     async def generate_streaming(self, text: str, voice_name: str = None):
-        """Generate speech in streaming mode"""
+        """Generate speech in streaming mode with optimizations"""
         import asyncio
         if self.model is None:
             raise RuntimeError("Model not loaded")
@@ -136,13 +165,19 @@ class TTSEngine:
             logger.info(f"Chunk {i+1}/{len(sentences)}: {sentence[:30]}...")
             
             loop = asyncio.get_event_loop()
+            
+            # Use autocast wrapper
+            def generate_with_autocast(s):
+                with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                    return self.model.generate_voice_clone(
+                        text=s,
+                        language="Korean",
+                        voice_clone_prompt=voice_prompt,
+                    )
+            
             wavs, sr = await loop.run_in_executor(
                 None,
-                lambda s=sentence: self.model.generate_voice_clone(
-                    text=s,
-                    language="Korean",
-                    voice_clone_prompt=voice_prompt,
-                )
+                lambda s=sentence: generate_with_autocast(s)
             )
             
             import time

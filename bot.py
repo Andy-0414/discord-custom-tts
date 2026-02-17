@@ -105,12 +105,12 @@ async def stream_command(ctx: commands.Context, *, text: str):
         )
         
         if error_container:
-            await ctx.send(f"❌ Error: {error_container[0]}")
+            error_msg = str(error_container[0])[:500]; await ctx.send(f"❌ Error: {error_msg}")
         else:
             await ctx.send("✅ Done!")
     except Exception as e:
         logger.error(f"Stream failed: {e}")
-        await ctx.send(f"❌ Failed: {e}")
+        error_msg = str(e)[:500]; await ctx.send(f"❌ Failed: {error_msg}")
 @bot.command(name="tts")
 async def tts_command(ctx: commands.Context, *, text: str):
     """
@@ -154,7 +154,7 @@ async def tts_command(ctx: commands.Context, *, text: str):
             
         except Exception as e:
             logger.error(f"TTS generation failed: {e}")
-            await ctx.reply(f"❌ TTS 생성 실패: {str(e)}")
+            error_msg = str(e)[:300]; await ctx.reply(f"❌ TTS 생성 실패: {error_msg}")
             return
     
     # Play audio
@@ -250,7 +250,7 @@ async def clone_command(ctx: commands.Context, voice_name: str):
             
         except Exception as e:
             logger.error(f"Voice clone creation failed: {e}")
-            await ctx.reply(f"❌ 목소리 프로필 생성 실패: {str(e)}")
+            error_msg = str(e)[:300]; await ctx.reply(f"❌ 목소리 프로필 생성 실패: {error_msg}")
 
 
 @bot.command(name="voices")

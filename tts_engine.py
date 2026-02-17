@@ -1,4 +1,5 @@
 import torch
+import os
 import soundfile as sf
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
@@ -31,10 +32,14 @@ class TTSEngine:
         try:
             # Try FlashAttention2 first, fallback to eager
             attn_impl = "eager"  # Default
+            use_flash = os.getenv("USE_FLASH_ATTN", "true").lower() == "true"
             try:
-                import flash_attn
-                attn_impl = "flash_attention_2"
-                logger.info("FlashAttention2 detected, using optimized attention")
+                if use_flash:
+                    import flash_attn
+                    attn_impl = "flash_attention_2"
+                    logger.info("FlashAttention2 enabled")
+                else:
+                    logger.info("FlashAttention2 disabled by config")
             except ImportError:
                 logger.info("FlashAttention2 not available, using eager mode")
             

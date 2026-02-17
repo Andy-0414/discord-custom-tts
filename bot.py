@@ -219,8 +219,8 @@ async def voices_command(ctx: commands.Context):
         await ctx.reply("❌ 사용 가능한 목소리 프로필이 없습니다.")
 
 
-@bot.command(name="help")
-async def help_command(ctx: commands.Context):
+@bot.command(name="commands")
+async def commands_command(ctx: commands.Context):
     """Show help message"""
     help_text = f"""
 🤖 **Discord Custom TTS Bot**

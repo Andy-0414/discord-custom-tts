@@ -31,7 +31,7 @@ class TTSEngine:
                 self.model_name,
                 device_map=self.device,
                 dtype=torch.bfloat16,
-                attn_implementation="flash_attention_2",
+                attn_implementation="eager",
             )
             logger.info("Model loaded successfully")
         except Exception as e:

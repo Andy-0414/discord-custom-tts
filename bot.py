@@ -56,7 +56,7 @@ async def on_ready():
 
 @bot.command(name="stream")
 async def stream_command(ctx: commands.Context, *, text: str):
-    """Stream TTS (low latency)"""
+    """Stream TTS with parallel generation and playback"""
     if not voice_manager.is_connected():
         if ctx.author.voice:
             await voice_manager.join_channel(ctx.author.voice.channel)
@@ -64,17 +64,53 @@ async def stream_command(ctx: commands.Context, *, text: str):
             await ctx.send("Join a voice channel first!")
             return
     
-    await ctx.send(f"Streaming: {text[:50]}...")
+    await ctx.send(f"🎵 Streaming: {text[:50]}...")
     
+    # Queue for chunks
+    chunk_queue = asyncio.Queue(maxsize=2)  # Buffer 2 chunks ahead
+    generation_done = asyncio.Event()
+    error_container = []
+    
+    # Producer: Generate chunks
+    async def generate_chunks():
+        try:
+            async for chunk_path, sr in tts_engine.generate_streaming(text):
+                logger.info(f"Generated chunk: {chunk_path}")
+                await chunk_queue.put(chunk_path)
+        except Exception as e:
+            logger.error(f"Generation failed: {e}")
+            error_container.append(e)
+        finally:
+            generation_done.set()
+            await chunk_queue.put(None)  # Sentinel
+    
+    # Consumer: Play chunks
+    async def play_chunks():
+        try:
+            while True:
+                chunk_path = await chunk_queue.get()
+                if chunk_path is None:  # Sentinel
+                    break
+                logger.info(f"Playing chunk: {chunk_path}")
+                await voice_manager.play_audio(chunk_path, cleanup=True)
+        except Exception as e:
+            logger.error(f"Playback failed: {e}")
+            error_container.append(e)
+    
+    # Run producer and consumer in parallel
     try:
-        async for chunk_path, sr in tts_engine.generate_streaming(text):
-            logger.info(f"Playing chunk: {chunk_path}")
-            await voice_manager.play_audio(chunk_path, cleanup=True)
-        await ctx.send("Done!")
+        await asyncio.gather(
+            generate_chunks(),
+            play_chunks()
+        )
+        
+        if error_container:
+            await ctx.send(f"❌ Error: {error_container[0]}")
+        else:
+            await ctx.send("✅ Done!")
     except Exception as e:
         logger.error(f"Stream failed: {e}")
-        await ctx.send(f"Failed: {e}")
-
+        await ctx.send(f"❌ Failed: {e}")
 @bot.command(name="tts")
 async def tts_command(ctx: commands.Context, *, text: str):
     """

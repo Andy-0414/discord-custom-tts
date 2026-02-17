@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  discord-tts-bot:
+    build: .
+    container_name: discord-custom-tts
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment
+    env_file:
+      - .env
+    
+    # Volumes
+    volumes:
+      - ./voices:/app/voices
+      - ./temp:/app/temp
+      - ./logs:/app/logs
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

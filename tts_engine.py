@@ -133,14 +133,13 @@ class TTSEngine:
             # Get or create cached voice prompt (2x faster!)
             voice_prompt = self._get_or_create_prompt(voice_name)
             
-            # Use autocast for mixed precision
-            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
-                # Generate voice clone with cached prompt
-                wavs, sr = self.model.generate_voice_clone(
-                    text=text,
-                    language="Korean",
-                    voice_clone_prompt=voice_prompt,
-                )
+            # Generate voice clone with cached prompt
+            # Note: Model already uses bfloat16, no autocast needed
+            wavs, sr = self.model.generate_voice_clone(
+                text=text,
+                language="Korean",
+                voice_clone_prompt=voice_prompt,
+            )
             
             # Save audio
             sf.write(str(output_path), wavs[0], sr)
@@ -172,18 +171,14 @@ class TTSEngine:
             
             loop = asyncio.get_event_loop()
             
-            # Use autocast wrapper
-            def generate_with_autocast(s):
-                with torch.cuda.amp.autocast(dtype=torch.bfloat16):
-                    return self.model.generate_voice_clone(
-                        text=s,
-                        language="Korean",
-                        voice_clone_prompt=voice_prompt,
-                    )
-            
+            # Generate with bfloat16 (no autocast needed)
             wavs, sr = await loop.run_in_executor(
                 None,
-                lambda s=sentence: generate_with_autocast(s)
+                lambda s=sentence: self.model.generate_voice_clone(
+                    text=s,
+                    language="Korean",
+                    voice_clone_prompt=voice_prompt,
+                )
             )
             
             import time

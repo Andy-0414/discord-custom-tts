@@ -30,11 +30,12 @@ class TTSEngine:
         
         try:
             # Try FlashAttention2 first, fallback to eager
+            attn_impl = "eager"  # Default
             try:
+                import flash_attn
                 attn_impl = "flash_attention_2"
-                logger.info("Attempting FlashAttention2...")
-            except:
-                attn_impl = "eager"
+                logger.info("FlashAttention2 detected, using optimized attention")
+            except ImportError:
                 logger.info("FlashAttention2 not available, using eager mode")
             
             self.model = Qwen3TTSModel.from_pretrained(

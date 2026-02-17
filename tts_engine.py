@@ -117,6 +117,52 @@ class TTSEngine:
             logger.error(f"Failed to generate TTS: {e}")
             raise
     
+
+    async def generate_streaming(self, text: str, voice_name: str = None):
+        """Generate speech in streaming mode"""
+        import asyncio
+        if self.model is None:
+            raise RuntimeError("Model not loaded")
+        
+        voice_name = voice_name or config.DEFAULT_VOICE
+        voice_prompt = self._get_or_create_prompt(voice_name)
+        
+        sentences = self._split_sentences(text)
+        
+        for i, sentence in enumerate(sentences):
+            if not sentence.strip():
+                continue
+                
+            logger.info(f"Chunk {i+1}/{len(sentences)}: {sentence[:30]}...")
+            
+            loop = asyncio.get_event_loop()
+            wavs, sr = await loop.run_in_executor(
+                None,
+                lambda s=sentence: self.model.generate_voice_clone(
+                    text=s,
+                    language="Korean",
+                    voice_clone_prompt=voice_prompt,
+                )
+            )
+            
+            import time
+            chunk_path = config.TEMP_DIR / f"chunk_{i}_{int(time.time()*1000)}.wav"
+            sf.write(str(chunk_path), wavs[0], sr)
+            
+            yield (chunk_path, sr)
+    
+    def _split_sentences(self, text: str):
+        """Split text into sentences"""
+        import re
+        sentences = re.split(r"([.!?]\s+)", text)
+        result = []
+        for i in range(0, len(sentences), 2):
+            if i+1 < len(sentences):
+                result.append(sentences[i] + sentences[i+1])
+            else:
+                result.append(sentences[i])
+        return [s.strip() for s in result if s.strip()]
+
     def clear_cache(self, voice_name: str = None):
         """Clear cached voice prompts"""
         if voice_name:

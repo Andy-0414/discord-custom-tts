@@ -53,6 +53,28 @@ async def on_ready():
     logger.info("Bot is ready!")
 
 
+
+@bot.command(name="stream")
+async def stream_command(ctx: commands.Context, *, text: str):
+    """Stream TTS (low latency)"""
+    if not voice_manager.is_connected():
+        if ctx.author.voice:
+            await voice_manager.join_channel(ctx.author.voice.channel)
+        else:
+            await ctx.send("Join a voice channel first!")
+            return
+    
+    await ctx.send(f"Streaming: {text[:50]}...")
+    
+    try:
+        async for chunk_path, sr in tts_engine.generate_streaming(text):
+            logger.info(f"Playing chunk: {chunk_path}")
+            await voice_manager.play_audio(chunk_path, cleanup=True)
+        await ctx.send("Done!")
+    except Exception as e:
+        logger.error(f"Stream failed: {e}")
+        await ctx.send(f"Failed: {e}")
+
 @bot.command(name="tts")
 async def tts_command(ctx: commands.Context, *, text: str):
     """

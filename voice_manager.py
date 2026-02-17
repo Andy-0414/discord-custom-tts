@@ -1,4 +1,4 @@
-﻿import discord
+import discord
 from discord.ext import commands
 from pathlib import Path
 import asyncio
@@ -16,6 +16,7 @@ class VoiceManager:
         self.voice_client: Optional[discord.VoiceClient] = None
         self.queue = asyncio.Queue()
         self.is_playing = False
+        self._playback_done = asyncio.Event()
         
     async def join_channel(self, channel: discord.VoiceChannel) -> bool:
         """Join a voice channel"""
@@ -76,47 +77,66 @@ class VoiceManager:
         try:
             # Wait if already playing
             while self.is_playing:
-                await asyncio.sleep(0.1)  # Reduced from 0.5s for faster response
+                await asyncio.sleep(0.1)
             
             self.is_playing = True
-            
-            # FFmpeg options for optimized playback
-            ffmpeg_options = {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                'options': '-vn -b:a 128k'  # Audio only, 128kbps bitrate
-            }
+            self._playback_done.clear()
             
             # Create audio source with volume transform
-            source = discord.FFmpegPCMAudio(str(audio_path), **ffmpeg_options)
+            # Note: No before_options needed for local files
+            source = discord.FFmpegPCMAudio(str(audio_path))
             source = discord.PCMVolumeTransformer(source, volume=volume)
             
-            # Play audio
+            # Callback after playback finishes
             def after_playing(error):
                 if error:
-                    logger.error(f"Error playing audio: {error}")
+                    logger.error(f"Error during playback: {error}")
+                
+                logger.info(f"Playback finished: {audio_path}")
                 self.is_playing = False
                 
-                # Cleanup
-                if cleanup and audio_path.exists():
-                    try:
-                        audio_path.unlink()
-                        logger.info(f"Deleted temp file: {audio_path}")
-                    except Exception as e:
-                        logger.error(f"Failed to delete temp file: {e}")
+                # Signal completion
+                asyncio.run_coroutine_threadsafe(
+                    self._cleanup_and_signal(audio_path, cleanup),
+                    self.bot.loop
+                )
             
+            # Start playback
             self.voice_client.play(source, after=after_playing)
             logger.info(f"Playing audio: {audio_path} (volume: {volume})")
             
-            # Wait for playback to finish (with shorter intervals)
-            while self.is_playing:
-                await asyncio.sleep(0.1)
+            # Wait for playback to complete
+            await self._playback_done.wait()
             
             return True
             
         except Exception as e:
             logger.error(f"Failed to play audio: {e}")
             self.is_playing = False
+            
+            # Cleanup on error
+            if cleanup and audio_path.exists():
+                try:
+                    audio_path.unlink()
+                except:
+                    pass
+            
             return False
+    
+    async def _cleanup_and_signal(self, audio_path: Path, cleanup: bool):
+        """Cleanup temp file and signal completion"""
+        # Small delay to ensure FFmpeg is completely done
+        await asyncio.sleep(0.5)
+        
+        if cleanup and audio_path.exists():
+            try:
+                audio_path.unlink()
+                logger.info(f"Deleted temp file: {audio_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete temp file: {e}")
+        
+        # Signal that playback is complete
+        self._playback_done.set()
     
     def is_connected(self) -> bool:
         """Check if bot is connected to voice channel"""

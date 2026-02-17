@@ -1,4 +1,4 @@
-import discord
+﻿import discord
 from discord.ext import commands
 from pathlib import Path
 import asyncio
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class VoiceManager:
-    """Discord Voice Channel Manager"""
+    """Discord Voice Channel Manager with optimizations"""
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -53,13 +53,14 @@ class VoiceManager:
             logger.error(f"Failed to leave channel: {e}")
             return False
     
-    async def play_audio(self, audio_path: Path, cleanup: bool = True) -> bool:
+    async def play_audio(self, audio_path: Path, cleanup: bool = True, volume: float = 1.0) -> bool:
         """
-        Play audio file in voice channel
+        Play audio file in voice channel with optimizations
         
         Args:
             audio_path: Path to audio file
             cleanup: Delete file after playing
+            volume: Playback volume (0.0 to 2.0)
             
         Returns:
             True if played successfully
@@ -75,12 +76,19 @@ class VoiceManager:
         try:
             # Wait if already playing
             while self.is_playing:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)  # Reduced from 0.5s for faster response
             
             self.is_playing = True
             
-            # Create audio source
-            source = discord.FFmpegPCMAudio(str(audio_path))
+            # FFmpeg options for optimized playback
+            ffmpeg_options = {
+                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+                'options': '-vn -b:a 128k'  # Audio only, 128kbps bitrate
+            }
+            
+            # Create audio source with volume transform
+            source = discord.FFmpegPCMAudio(str(audio_path), **ffmpeg_options)
+            source = discord.PCMVolumeTransformer(source, volume=volume)
             
             # Play audio
             def after_playing(error):
@@ -97,11 +105,11 @@ class VoiceManager:
                         logger.error(f"Failed to delete temp file: {e}")
             
             self.voice_client.play(source, after=after_playing)
-            logger.info(f"Playing audio: {audio_path}")
+            logger.info(f"Playing audio: {audio_path} (volume: {volume})")
             
-            # Wait for playback to finish
+            # Wait for playback to finish (with shorter intervals)
             while self.is_playing:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
             
             return True
             
@@ -119,3 +127,9 @@ class VoiceManager:
         if self.voice_client and self.voice_client.is_connected():
             return self.voice_client.channel
         return None
+    
+    def stop(self):
+        """Stop current playback"""
+        if self.voice_client and self.voice_client.is_playing():
+            self.voice_client.stop()
+            logger.info("Stopped playback")

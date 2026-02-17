@@ -1,7 +1,7 @@
-import torch
+﻿import torch
 import soundfile as sf
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import logging
 
 from qwen_tts import Qwen3TTSModel
@@ -11,12 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class TTSEngine:
-    """Qwen3-TTS Voice Clone Engine"""
+    """Qwen3-TTS Voice Clone Engine with caching"""
     
     def __init__(self):
         self.model: Optional[Qwen3TTSModel] = None
         self.device = config.DEVICE
         self.model_name = config.MODEL_NAME
+        self.voice_prompts: Dict[str, Any] = {}  # Cache for voice prompts
         
     def load_model(self):
         """Load Qwen3-TTS model (called once at startup)"""
@@ -51,9 +52,28 @@ class TTSEngine:
             
         return ref_audio, ref_text
     
+    def _get_or_create_prompt(self, voice_name: str) -> Any:
+        """Get cached voice prompt or create new one"""
+        if voice_name in self.voice_prompts:
+            logger.info(f"Using cached prompt for voice '{voice_name}'")
+            return self.voice_prompts[voice_name]
+        
+        logger.info(f"Creating new voice prompt for '{voice_name}'")
+        ref_audio_path, ref_text_path = self._get_voice_files(voice_name)
+        ref_text = ref_text_path.read_text(encoding="utf-8").strip()
+        
+        prompt = self.model.create_voice_clone_prompt(
+            ref_audio=str(ref_audio_path),
+            ref_text=ref_text,
+            x_vector_only_mode=False,
+        )
+        
+        self.voice_prompts[voice_name] = prompt
+        return prompt
+    
     def generate(self, text: str, voice_name: str = None, output_path: Path = None) -> Path:
         """
-        Generate speech using voice cloning
+        Generate speech using voice cloning with caching
         
         Args:
             text: Text to synthesize
@@ -68,10 +88,6 @@ class TTSEngine:
         
         voice_name = voice_name or config.DEFAULT_VOICE
         
-        # Get reference files
-        ref_audio_path, ref_text_path = self._get_voice_files(voice_name)
-        ref_text = ref_text_path.read_text(encoding="utf-8").strip()
-        
         # Generate output path
         if output_path is None:
             import time
@@ -81,12 +97,14 @@ class TTSEngine:
         logger.info(f"Generating TTS: '{text[:50]}...' using voice '{voice_name}'")
         
         try:
-            # Generate voice clone
+            # Get or create cached voice prompt (2x faster!)
+            voice_prompt = self._get_or_create_prompt(voice_name)
+            
+            # Generate voice clone with cached prompt
             wavs, sr = self.model.generate_voice_clone(
                 text=text,
                 language="Korean",
-                ref_audio=str(ref_audio_path),
-                ref_text=ref_text,
+                voice_clone_prompt=voice_prompt,
             )
             
             # Save audio
@@ -99,10 +117,20 @@ class TTSEngine:
             logger.error(f"Failed to generate TTS: {e}")
             raise
     
+    def clear_cache(self, voice_name: str = None):
+        """Clear cached voice prompts"""
+        if voice_name:
+            self.voice_prompts.pop(voice_name, None)
+            logger.info(f"Cleared cache for voice '{voice_name}'")
+        else:
+            self.voice_prompts.clear()
+            logger.info("Cleared all voice prompts cache")
+    
     def unload_model(self):
         """Unload model to free GPU memory"""
         if self.model is not None:
             del self.model
             self.model = None
+            self.voice_prompts.clear()
             torch.cuda.empty_cache()
             logger.info("Model unloaded")

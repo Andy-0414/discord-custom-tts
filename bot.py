@@ -281,26 +281,16 @@ async def voices_command(ctx: commands.Context):
 async def commands_command(ctx: commands.Context):
     """Show help message"""
     help_text = f"""
-🤖 **Discord Custom TTS Bot**
+🎵 **TTS Bot Commands**
 
-**명령어:**
-• `{config.COMMAND_PREFIX}tts <텍스트>` - 텍스트를 음성으로 변환
-• `{config.COMMAND_PREFIX}join` - 음성 채널 참가
-• `{config.COMMAND_PREFIX}leave` - 음성 채널 나가기
-• `{config.COMMAND_PREFIX}voices` - 사용 가능한 목소리 목록
-• `{config.COMMAND_PREFIX}clone <이름>` - 새 목소리 추가 (관리자)
-• `{config.COMMAND_PREFIX}help` - 도움말
+`!tts <텍스트>` - TTS 생성
+`!stream <텍스트>` - 스트리밍 TTS
+`!join` / `!leave` - 채널 입/퇴장
+`!voices` - 목소리 목록
+`!clone <이름>` - 목소리 추가 (관리자)
 
-**사용법:**
-1. 음성 채널에 들어갑니다
-2. `{config.COMMAND_PREFIX}tts 안녕하세요!` 명령어 입력
-3. 봇이 자동으로 채널에 참가해서 음성을 재생합니다
-
-**기술 스택:**
-• Qwen3-TTS Voice Clone
-• Discord.py
-
-**현재 목소리:** {config.DEFAULT_VOICE}
+🚀 Optimized: 0.6B model + FlashAttention2
+🎙️ Voice: {config.DEFAULT_VOICE}
 """
     await ctx.reply(help_text)
 
@@ -316,7 +306,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         await ctx.reply("❌ 이 명령어를 실행할 권한이 없습니다. (관리자 전용)")
     else:
         logger.error(f"Command error: {error}")
-        await ctx.reply(f"❌ 오류 발생: {str(error)}")
+        error_msg = str(error)[:500]; await ctx.reply(f"❌ 오류: {error_msg}")
 
 
 def main():
